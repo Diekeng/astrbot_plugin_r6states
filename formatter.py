@@ -74,7 +74,7 @@ def format_new_overview(player_id: str, stats_data: dict, ops_data: dict) -> str
             
             res.append(f"{name:<12} | {kd:<5} | {wr:<4}% | {k}/{d:<6} | {matches}")
     else:
-        res.append("未获取到本赛季统计数据。")
+        res.append("未获取到本赛季统计数据喵。")
         
     res.append("")
     
@@ -84,7 +84,7 @@ def format_new_overview(player_id: str, stats_data: dict, ops_data: dict) -> str
         res.append(f"👑 本赛季最高: {get_rank_name(max_rank)} ({max_rp} RP)")
         res.append(f"当前排位: {get_rank_name(curr_rank)} ({curr_rp} RP)")
     else:
-        res.append("未获取到本赛季有效排位记录。")
+        res.append("未获取到本赛季有效排位记录喵。")
         
     res.append("")
     
