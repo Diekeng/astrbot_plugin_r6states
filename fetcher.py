@@ -1,5 +1,6 @@
 import httpx
 import asyncio
+from typing import Optional, Dict, Any, List
 
 async def fetch_r6data(player_id: str, api_key: str, data_type: str, platform: str = "uplay") -> dict:
     url = "https://api.r6data.eu/api/stats"
@@ -128,3 +129,23 @@ async def fetch_pandascore_matches(query: str, api_key: str) -> dict:
         return {"type": "league", "name": l_name, "matches": matches or []}
         
     return {"error": f"找不到名称匹配 '{query}' 的队伍或赛区。"}
+
+async def fetch_player_seasonal_stats(player_id: str, api_key: str, platform: str = "uplay") -> dict:
+    return await fetch_r6data(player_id, api_key, "seasonalStats", platform)
+
+async def fetch_r6_wiki(endpoint: str, api_key: str, params: Optional[Dict[str, Any]] = None) -> Any:
+    """通用 Wiki 数据抓取转发器"""
+    url = f"https://api.r6data.eu/api/{endpoint.lstrip('/')}"
+    headers = {"api-key": api_key, "Content-Type": "application/json"}
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.get(url, params=params, headers=headers)
+            resp.raise_for_status()
+            return resp.json()
+    except Exception as e:
+        return {"error": str(e)}
+
+async def fetch_game_online_stats(api_key: str) -> dict:
+    """获取全平台实时在线人数"""
+    return await fetch_r6_wiki("stats", api_key, params={"type": "gameStats"})
+

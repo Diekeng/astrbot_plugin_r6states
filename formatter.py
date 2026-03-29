@@ -1,4 +1,5 @@
 from typing import Dict, List
+from datetime import datetime
 
 def clean_number(s: str) -> str:
     return s.replace(',', '')
@@ -74,7 +75,7 @@ def format_new_overview(player_id: str, stats_data: dict, ops_data: dict) -> str
             
             res.append(f"{name:<12} | {kd:<5} | {wr:<4}% | {k}/{d:<6} | {matches}")
     else:
-        res.append("未获取到本赛季统计数据喵。")
+        res.append("未获取到本赛季统计数据。")
         
     res.append("")
     
@@ -84,7 +85,7 @@ def format_new_overview(player_id: str, stats_data: dict, ops_data: dict) -> str
         res.append(f"👑 本赛季最高: {get_rank_name(max_rank)} ({max_rp} RP)")
         res.append(f"当前排位: {get_rank_name(curr_rank)} ({curr_rp} RP)")
     else:
-        res.append("未获取到本赛季有效排位记录喵。")
+        res.append("未获取到本赛季有效排位记录。")
         
     res.append("")
     
@@ -128,3 +129,44 @@ def format_new_overview(player_id: str, stats_data: dict, ops_data: dict) -> str
         res.append("本赛季无相关统计干员数据喵。")
 
     return "\n".join(res)
+
+def format_match_history(player_id: str, sea_data: dict) -> str:
+    if "error" in sea_data:
+        return f"❌ 获取 {player_id} 变动记录失败: {sea_data['error']}"
+    
+    history = sea_data.get("data", {}).get("history", {}).get("data", [])
+    if not history:
+        return f"📅 玩家 {player_id} 本赛季暂无排位变动记录。"
+    
+    res = [f"📊 {player_id} 最近比赛记录 (Rank Points)"]
+    
+    # 我们展示最近的 3 次变动 (需要 4 个数据点来计算 3 个差值)
+    count = 0
+    for i in range(len(history) - 1):
+        if count >= 3: break
+        
+        curr = history[i]
+        prev = history[i+1]
+        
+        t_str = curr[0] # ISO time
+        try:
+            dt = datetime.fromisoformat(t_str.replace("Z", "+00:00"))
+            display_time = dt.strftime("%m-%d %H:%M")
+        except:
+            display_time = t_str
+            
+        curr_val = curr[1].get("value", 0)
+        prev_val = prev[1].get("value", 0)
+        diff = curr_val - prev_val
+        
+        rank_name = curr[1].get("metadata", {}).get("rank", "Unknown")
+        result_icon = "📈 胜" if diff > 0 else "📉 负" if diff < 0 else "➖ 平/未变"
+        
+        res.append(f"{count+1}. {display_time} | {result_icon} ({diff:+} RP) | {rank_name} [{curr_val} RP]")
+        count += 1
+        
+    if count == 0:
+        res.append("暂无足够的数据点来对比胜负变动。")
+        
+    return "\n".join(res)
+
