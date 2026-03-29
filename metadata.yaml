@@ -1,5 +1,5 @@
 name: "astrbot_plugin_r6states"
-desc: "查询彩虹六号的玩家战绩和电竞信息，nonebot-plugin-R6States的astrbot移植版"
+desc: "查询彩虹六号的玩家战绩、游戏百科和电竞信息，nonebot-plugin-R6States的astrbot移植版"
 help: "/R6 <id> 获取战绩 /R6M 队伍名或者赛区"
 version: "v1.0.0"
 author: "Throstle"
