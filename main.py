@@ -37,14 +37,14 @@ class R6StatesPlugin(Star):
             stats_data, ops_data = await asyncio.gather(stats_task, ops_task)
             
             if "error" in stats_data and stats_data["error"]:
-                return f"获取 {player_id} 错误: {stats_data['error']}"
+                return f"获取 {player_id} 错误喵: {stats_data['error']}"
                 
             return format_new_overview(player_id, stats_data, ops_data)
         except Exception as e:
-            logger.error(f"查询玩家 {player_id} 出错: {type(e).__name__}: {e}")
+            logger.error(f"查询玩家 {player_id} 出错喵: {type(e).__name__}: {e}")
             import traceback
             traceback.print_exc()
-            return f"❌ 查询玩家 {player_id} 失败，可能是由于ID错误或网络延迟: {e}"
+            return f"❌ 查询玩家 {player_id} 失败喵，可能是由于ID错误或网络延迟喵: {e}"
 
     @filter.command("R6")
     async def r6_command(self, event: AstrMessageEvent, message: str = ""):
