@@ -83,6 +83,5 @@
 
 # Supports
 
-- [AstrBot Repo](https://github.com/AstrBotDevs/AstrBot)
-- [AstrBot Plugin Development Docs (Chinese)](https://docs.astrbot.app/dev/star/plugin-new.html)
-- [AstrBot Plugin Development Docs (English)](https://docs.astrbot.app/en/dev/star/plugin-new.html)
+- [个人主页](https://space.bilibili.com/290347024?spm_id_from=333.1007.0.0)
+- [githuub](https://github.com/Diekeng/astrbot_plugin_r6states)
