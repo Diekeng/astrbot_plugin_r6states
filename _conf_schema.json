@@ -1,0 +1,19 @@
+{
+  "api_key": {
+    "description": "R6Data API Key",
+    "type": "string",
+    "hint": "用于请求 API 获取账号操作者数据, 使用 /R6DAPI 获取方式详见文档",
+    "default": ""
+  },
+  "pandascore_api_key": {
+    "description": "Pandascore API Key",
+    "type": "string",
+    "hint": "用于请求近期比赛日程和比分",
+    "default": ""
+  },
+  "players_file": {
+    "description": "默认玩家ID文件路径",
+    "type": "string",
+    "default": "data/r6_players.yaml"
+  }
+}
