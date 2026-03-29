@@ -1,5 +1,4 @@
 from typing import List, Dict, Any, Optional
-from datetime import datetime
 
 MAP_TRANSLATIONS = {
     "house": "芝加哥豪宅",
@@ -46,8 +45,12 @@ MAP_TRANSLATIONS = {
 REVERSE_MAP_TRANSLATIONS = {v: k for k, v in MAP_TRANSLATIONS.items()}
 # 补充一些可能的简短中文输入
 REVERSE_MAP_TRANSLATIONS.update({
-    "豪宅": "house",
     "俄勒冈": "oregon",
+    "俄勒冈乡间屋宅": "oregon",
+    "豪宅": "house",
+    "运河": "kanal",
+    "银行": "bank",
+    "边境": "border",
     "咖啡馆": "kafe",
     "实验室": "nighthavenlabs",
     "竞技场": "stadiumbravo",
@@ -69,10 +72,13 @@ def _find_exact(data: List[Dict[str, Any]], query: str) -> Optional[Dict[str, An
     return data[0]
 
 def format_operator_info(data: List[Dict[str, Any]], query: str = "") -> str:
-    if not data or "error" in data:
-        return f"❌ 未找到该干员信息。" if not data else f"❌ 错误: {data.get('error')}"
+    if not isinstance(data, list) or not data:
+        if isinstance(data, dict) and "error" in data:
+            return f"❌ 错误: {data.get('error')}"
+        return "❌ 未找到该干员信息。"
     
     op = _find_exact(data, query)
+    if not op: return "❌ 未找到该干员详细信息。"
     
     roles = op.get('roles', [])
     if isinstance(roles, list):
@@ -95,10 +101,11 @@ def format_operator_info(data: List[Dict[str, Any]], query: str = "") -> str:
     return "\n".join(res)
 
 def format_weapon_info(data: List[Dict[str, Any]], query: str = "") -> str:
-    if not data or "error" in data:
+    if not isinstance(data, list) or not data:
         return "❌ 未找到该武器信息。"
     
     w = _find_exact(data, query)
+    if not w: return "❌ 未找到该武器详细信息。"
     
     ops = w.get('operators', "")
     if isinstance(ops, str):
@@ -118,10 +125,11 @@ def format_weapon_info(data: List[Dict[str, Any]], query: str = "") -> str:
     return "\n".join(res)
 
 def format_map_info(data: List[Dict[str, Any]], query: str = "") -> str:
-    if not data or "error" in data:
+    if not isinstance(data, list) or not data:
         return "❌ 未找到该地图信息。"
     
     m = _find_exact(data, query)
+    if not m: return "❌ 未找到该地图详细信息。"
     m_name = m.get('name', '')
     m_name_cn = MAP_TRANSLATIONS.get(m_name.lower(), m_name)
 

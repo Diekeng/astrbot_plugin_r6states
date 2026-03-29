@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Dict
 from datetime import datetime
 
 def clean_number(s: str) -> str:
@@ -42,19 +42,22 @@ def format_new_overview(player_id: str, stats_data: dict, ops_data: dict) -> str
     curr_rp = 0
     season_id = "未知"
 
-    if "platform_families_full_profiles" in stats_data and stats_data["platform_families_full_profiles"]:
-        boards = stats_data["platform_families_full_profiles"][0].get("board_ids_full_profiles", [])
+    profiles = stats_data.get("platform_families_full_profiles", [])
+    if isinstance(profiles, list) and len(profiles) > 0:
+        boards = profiles[0].get("board_ids_full_profiles", [])
         
         for board in boards:
             b_id = board.get("board_id", "")
             if b_id == "ranked":
                 name = "排位"
-                prof = board["full_profiles"][0].get("profile", {})
-                max_rank = prof.get("max_rank", 0)
-                max_rp = prof.get("max_rank_points", 0)
-                curr_rank = prof.get("rank", 0)
-                curr_rp = prof.get("rank_points", 0)
-                season_id = prof.get("season_id", "未知")
+                inner_profiles = board.get("full_profiles", [])
+                if inner_profiles and isinstance(inner_profiles, list):
+                    prof = inner_profiles[0].get("profile", {})
+                    max_rank = prof.get("max_rank", 0)
+                    max_rp = prof.get("max_rank_points", 0)
+                    curr_rank = prof.get("rank", 0)
+                    curr_rp = prof.get("rank_points", 0)
+                    season_id = prof.get("season_id", "未知")
             elif b_id == "standard":
                 name = "快速"
             elif b_id == "living_game_mode":
@@ -62,7 +65,9 @@ def format_new_overview(player_id: str, stats_data: dict, ops_data: dict) -> str
             else:
                 continue
                 
-            stats = board["full_profiles"][0].get("season_statistics", {})
+            inner_profiles = board.get("full_profiles", [])
+            if not inner_profiles: continue
+            stats = inner_profiles[0].get("season_statistics", {})
             k = stats.get("kills", 0)
             d = stats.get("deaths", 0)
             w = stats.get("match_outcomes", {}).get("wins", 0)
@@ -79,7 +84,7 @@ def format_new_overview(player_id: str, stats_data: dict, ops_data: dict) -> str
         
     res.append("")
     
-    # 2. 本赛季段位记录 (无爬虫降级)
+    # 2. 本赛季段位记录
     res.append(f"🎖️ [排位记录 (Season {season_id})]")
     if max_rank > 0 or max_rp > 0:
         res.append(f"👑 本赛季最高: {get_rank_name(max_rank)} ({max_rp} RP)")
@@ -89,31 +94,36 @@ def format_new_overview(player_id: str, stats_data: dict, ops_data: dict) -> str
         
     res.append("")
     
-    # 3. 近三个模式最常用的干员
-    res.append("🔫 [本赛季或生涯最常用干员喵")
+    # 3. 最常用的干员
+    res.append("🔫 [本赛季或生涯最常用干员]")
     operator_plays = {}
     
-    if "split" in ops_data and "pc" in ops_data["split"]:
-        playlists = ops_data["split"]["pc"]["playlists"]
-        for p_name, p_data in playlists.items():
-            if "operators" in p_data:
-                for op_id, op_info in p_data["operators"].items():
+    # 防御式访问 ops_data
+    split_data = ops_data.get("split", {})
+    if isinstance(split_data, dict):
+        playlists = split_data.get("pc", {}).get("playlists", {})
+        if isinstance(playlists, dict):
+            for p_name, p_data in playlists.items():
+                if not isinstance(p_data, dict): continue
+                ops = p_data.get("operators", {})
+                if not isinstance(ops, dict): continue
+                for op_id, op_info in ops.items():
+                    if not isinstance(op_info, dict): continue
                     name = op_info.get("operator", "Unknown")
+                    rounds = op_info.get("rounds", {})
                     # Try to get seasonal first, fallback to lifetime
-                    played = op_info.get("rounds", {}).get("seasonal", {}).get("played", 0)
-                    won = op_info.get("rounds", {}).get("seasonal", {}).get("won", 0)
+                    played = rounds.get("seasonal", {}).get("played", 0)
+                    won = rounds.get("seasonal", {}).get("won", 0)
                     
                     if played == 0:
-                        played = op_info.get("rounds", {}).get("lifetime", {}).get("played", 0)
-                        won = op_info.get("rounds", {}).get("lifetime", {}).get("won", 0)
+                        played = rounds.get("lifetime", {}).get("played", 0)
+                        won = rounds.get("lifetime", {}).get("won", 0)
                     
                     if name not in operator_plays:
                         operator_plays[name] = {"played": 0, "won": 0}
                         
-                    if played:
-                        operator_plays[name]["played"] += played
-                    if won:
-                        operator_plays[name]["won"] += won
+                    operator_plays[name]["played"] += played
+                    operator_plays[name]["won"] += won
                         
     # 取前三
     sorted_ops = sorted(operator_plays.items(), key=lambda x: x[1]["played"], reverse=True)
@@ -131,8 +141,8 @@ def format_new_overview(player_id: str, stats_data: dict, ops_data: dict) -> str
     return "\n".join(res)
 
 def format_match_history(player_id: str, sea_data: dict) -> str:
-    if "error" in sea_data:
-        return f"❌ 获取 {player_id} 变动记录失败: {sea_data['error']}"
+    if not isinstance(sea_data, dict) or "error" in sea_data:
+        return f"❌ 获取 {player_id} 变动记录失败: {sea_data.get('error') if isinstance(sea_data, dict) else '未知数据结构'}"
     
     history = sea_data.get("data", {}).get("history", {}).get("data", [])
     if not history:
@@ -148,18 +158,26 @@ def format_match_history(player_id: str, sea_data: dict) -> str:
         curr = history[i]
         prev = history[i+1]
         
+        if not isinstance(curr, list) or len(curr) < 2 or not isinstance(prev, list) or len(prev) < 2:
+            continue
+
         t_str = curr[0] # ISO time
         try:
             dt = datetime.fromisoformat(t_str.replace("Z", "+00:00"))
             display_time = dt.strftime("%m-%d %H:%M")
-        except:
-            display_time = t_str
+        except (ValueError, TypeError):
+            display_time = str(t_str)[:16]
             
-        curr_val = curr[1].get("value", 0)
-        prev_val = prev[1].get("value", 0)
+        curr_obj = curr[1]
+        prev_obj = prev[1]
+        if not isinstance(curr_obj, dict) or not isinstance(prev_obj, dict):
+            continue
+
+        curr_val = curr_obj.get("value", 0)
+        prev_val = prev_obj.get("value", 0)
         diff = curr_val - prev_val
         
-        rank_name = curr[1].get("metadata", {}).get("rank", "Unknown")
+        rank_name = curr_obj.get("metadata", {}).get("rank", "Unknown")
         result_icon = "📈 胜" if diff > 0 else "📉 负" if diff < 0 else "➖ 平/未变"
         
         res.append(f"{count+1}. {display_time} | {result_icon} ({diff:+} RP) | {rank_name} [{curr_val} RP]")
