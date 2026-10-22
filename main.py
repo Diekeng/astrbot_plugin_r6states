@@ -6,10 +6,85 @@ from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star
 from astrbot.api import logger, AstrBotConfig
 
-from .fetcher import fetch_player_data, fetch_player_stats, fetch_pandascore_matches, fetch_player_seasonal_stats, fetch_r6_wiki, fetch_game_online_stats
+from .fetcher import fetch_player_profile, fetch_player_operators, fetch_pandascore_matches, fetch_player_seasonal_stats, fetch_r6_wiki, fetch_game_online_stats
 from .formatter import format_new_overview, format_match_history
 from .formatter3 import format_pandascore_matches
 from . import formatter_wiki as wiki_fmt
+
+HELP_TEXT = (
+    "🎮 彩虹六号 · 常用指令\n"
+    "\n"
+    "/r6 <玩家ID>      查战绩\n"
+    "/r6h <玩家ID>     查排位变动\n"
+    "/r6op <干员>      查干员百科\n"
+    "\n"
+    "📖 全部指令：/r6 -h all\n"
+    "🔍 单条详情：/r6 -h r6h\n"
+    "💬 也可以直接说：“查一下 MacieJay 的战绩”\n"
+    "🔑 Key 申请：https://r6.arenyze.com/"
+)
+
+HELP_ALL = (
+    "🎮 彩虹六号 · 全部指令\n"
+    "\n"
+    "【战绩】\n"
+    "/r6 <玩家ID>          赛季战绩概览\n"
+    "/r6 -g <ID1> <ID2>…   批量查询，最多 5 人\n"
+    "/r6h <玩家ID>         最近排位 RP 变动\n"
+    "\n"
+    "【百科】\n"
+    "/r6op <干员>          属性、定位与背景\n"
+    "/r6map <地图>         地图详情，支持中文\n"
+    "/r6w <武器>           伤害、射速与配件\n"
+    "/r6s                  全平台实时在线人数\n"
+    "\n"
+    "【赛事】\n"
+    "/r6m <队伍/赛区>      近期赛程与比分\n"
+    "赛区：EU/EML、NA/NAL、CN/CNL、BR、LATAM、\n"
+    "      KR、JP、ASIA/APL、SAL、OCE、MENA\n"
+    "\n"
+    "【配置】\n"
+    "/r6dapi <Key>         绑定 R6Data API Key\n"
+    "\n"
+    "🔍 单条详情：/r6 -h <指令>"
+)
+
+TOPIC_HELP = {
+    "r6": "🔎 /r6 <玩家ID>\n查询排位/标准/休闲的 KD、胜率、场次、段位与常用干员。\n示例：/r6 MacieJay",
+    "r6g": "🔎 /r6 -g <ID1> <ID2> …\n批量查询多名玩家，最多 5 人。\n示例：/r6 -g MacieJay Beaulo",
+    "r6h": "🔎 /r6h <玩家ID>\n查看最近的排位 RP 增减记录（最近 3 次变动）。\n示例：/r6h MacieJay",
+    "r6m": "🔎 /r6m <队伍名/赛区>\n查询战队或赛区最近 5 场比赛。\n示例：/r6m G2、/r6m NAL\n赛区：EU/EML、NA/NAL、CN/CNL、BR、LATAM、KR、JP、ASIA/APL、SAL、OCE、MENA",
+    "r6op": "🔎 /r6op <干员名>\n查询干员属性、定位、组织与背景。\n示例：/r6op Ash",
+    "r6map": "🔎 /r6map <地图名>\n查询地图详情，支持中文名。\n示例：/r6map 俄勒冈、/r6map Bank",
+    "r6w": "🔎 /r6w <武器名>\n查询武器伤害、射速、弹匣与配件。\n示例：/r6w R4-C",
+    "r6s": "🔎 /r6s\n查看全平台实时在线人数与注册用户统计。\n示例：/r6s",
+    "r6dapi": "🔎 /r6dapi <Key>\n绑定 R6Data API Key，Key 有效期内无需重复绑定。\nKey 申请：https://r6.arenyze.com/（有效期约 1 个月）",
+}
+
+TOPIC_ALIASES = {
+    "g": "r6g",
+    "group": "r6g",
+    "组队": "r6g",
+    "批量": "r6g",
+    "op": "r6op",
+    "map": "r6map",
+    "w": "r6w",
+    "s": "r6s",
+    "m": "r6m",
+}
+
+
+def help_for(topic: str = "") -> str:
+    """按指令名返回详情；all/空 返回完整列表；未知指令回退到常用指令"""
+    key = (topic or "").strip().lower().lstrip("/")
+    key = TOPIC_ALIASES.get(key, key)
+    if key in ("all", "全部", "help", "帮助"):
+        return HELP_ALL
+    if not key:
+        return HELP_TEXT
+    if key in TOPIC_HELP:
+        return TOPIC_HELP[key]
+    return f"没有找到「{topic}」这条指令。\n\n{HELP_TEXT}"
 
 
 class R6StatesPlugin(Star):
@@ -28,9 +103,9 @@ class R6StatesPlugin(Star):
         try:
             api_key = self.config.get("api_key", "")
             
-            # Fetch parallel data pure API
-            stats_task = fetch_player_stats(player_id, api_key)
-            ops_task = fetch_player_data(player_id, api_key)
+            # 新版 API：/v2/profile 一次返回战绩，干员数据走独立接口
+            stats_task = fetch_player_profile(player_id, api_key)
+            ops_task = fetch_player_operators(player_id, api_key)
             
             stats_data, ops_data = await asyncio.gather(stats_task, ops_task)
             
@@ -43,7 +118,7 @@ class R6StatesPlugin(Star):
 
     @filter.command("r6")
     async def r6_command(self, event: AstrMessageEvent, message: str = ""):
-        '''查询 R6S 战绩: /R6 [-g] [-h] <id1> <id2>'''
+        '''查询 R6S 玩家战绩。用法：/r6 <玩家ID>；批量：/r6 -g <ID1> <ID2>；帮助：/r6 -h [指令|all]'''
         parser = self.create_parser()
         
         if message:
@@ -53,15 +128,7 @@ class R6StatesPlugin(Star):
             args_list = parts[1:] if len(parts) > 1 else []
             
         if not args_list:
-            yield event.plain_result(
-                "/R6 [options] <id1> <id2> ...\n"
-                "-g, --group    开启组队模式喵 (最多5个喵)\n"
-                "-h, --help     查看完整帮助喵\n"
-                "/R6M <名称>          查询赛区排期与比分\n"
-                "/R6H <ID>            查询最近战绩变动记录\n"
-                "/R6OP <名称>         查询干员详细百科信息\n"
-                "/R6S                 查看服务器当前在线人数\n"
-            )
+            yield event.plain_result(HELP_TEXT)
             return
 
         try:
@@ -71,16 +138,8 @@ class R6StatesPlugin(Star):
             return
 
         if parsed_args.help:
-            yield event.plain_result(
-                "/R6 [options] <id1> <id2> ...\n"
-                "-g, --group    开启组队模式 (最多5个)喵\n"
-                "-m, --map      指定地图喵\n"
-                "-h, --help     查看完整帮助喵\n"
-                "/R6M <队伍名/赛区>   查询赛区排期与比分喵\n"
-                "/R6H <ID>            查询最近战绩变动记录喵\n"
-                "/R6OP <干员名>       查询干员详细百科信息喵\n"
-                "/R6S                 查看服务器当前在线人数喵\n"
-            )
+            topic = parsed_args.ids[0] if parsed_args.ids else ""
+            yield event.plain_result(help_for(topic))
             return
 
         ids = parsed_args.ids
@@ -108,7 +167,7 @@ class R6StatesPlugin(Star):
 
     @filter.command("r6dapi")
     async def set_api_key(self, event: AstrMessageEvent, message: str = ""):
-        '''配置 R6Data API Key (管理员或直接在WebUI配置喵)'''
+        '''配置 R6Data API Key。用法：/r6dapi <Key>；Key 可在 https://r6.arenyze.com/ 获取'''
         key = message.strip()
         if not key:
             parts = event.message_str.split(maxsplit=1)
@@ -125,7 +184,7 @@ class R6StatesPlugin(Star):
 
     @filter.command("r6m")
     async def r6m_command(self, event: AstrMessageEvent, message: str = ""):
-        '''查询 R6S 赛事: /R6M <队伍名或赛区简称>'''
+        '''查询 R6S 电竞赛程与比分。用法：/r6m <队伍名或赛区简称>'''
         query = message.strip()
         if not query:
             parts = event.message_str.split(maxsplit=1)
@@ -147,21 +206,21 @@ class R6StatesPlugin(Star):
 
     @filter.command("r6h")
     async def r6h_command(self, event: AstrMessageEvent, player_id: str):
-        '''查询 R6S 战绩变动: /R6H <id>'''
+        '''查询玩家最近排位 RP 变动。用法：/r6h <玩家ID>'''
         api_key = self.config.get("api_key", "")
         data = await fetch_player_seasonal_stats(player_id, api_key)
         yield event.plain_result(format_match_history(player_id, data))
 
     @filter.command("r6op")
     async def r6op_command(self, event: AstrMessageEvent, name: str):
-        '''查询 R6S 干员百科: /R6OP <干员名>'''
+        '''查询干员百科。用法：/r6op <干员名>'''
         api_key = self.config.get("api_key", "")
         data = await fetch_r6_wiki("operators", api_key, params={"name": name})
         yield event.plain_result(wiki_fmt.format_operator_info(data, name))
 
     @filter.command("r6map")
     async def r6map_command(self, event: AstrMessageEvent, name: str):
-        '''查询 R6S 地图百科: /R6MAP <地图名>'''
+        '''查询地图百科。用法：/r6map <地图名>，支持中文名'''
         api_key = self.config.get("api_key", "")
         # 尝试将中文翻译回英文
         eng_name = wiki_fmt.translate_map_query(name)
@@ -170,7 +229,7 @@ class R6StatesPlugin(Star):
 
     @filter.command("r6w")
     async def r6w_command(self, event: AstrMessageEvent, name: str):
-        '''查询 R6S 武器百科: /R6W <武器名>'''
+        '''查询武器数据。用法：/r6w <武器名>'''
         api_key = self.config.get("api_key", "")
         data = await fetch_r6_wiki("weapons", api_key, params={"name": name})
         yield event.plain_result(wiki_fmt.format_weapon_info(data, name))
@@ -178,7 +237,7 @@ class R6StatesPlugin(Star):
 
     @filter.command("r6s")
     async def r6s_online_command(self, event: AstrMessageEvent):
-        '''查询 R6S 服务器在线人数: /R6S'''
+        '''查询全平台实时在线人数。用法：/r6s'''
         api_key = self.config.get("api_key", "")
         data = await fetch_game_online_stats(api_key)
         yield event.plain_result(wiki_fmt.format_game_stats(data))

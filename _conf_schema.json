@@ -2,7 +2,7 @@
   "api_key": {
     "description": "R6Data API Key",
     "type": "string",
-    "hint": "用于请求 API 获取账号操作者数据, 使用 /R6DAPI 获取方式详见文档",
+    "hint": "用于请求玩家战绩数据。请前往 https://r6.arenyze.com/ 免费获取（有效期约 1 个月），也可用 /R6DAPI <key> 绑定",
     "default": ""
   },
   "pandascore_api_key": {

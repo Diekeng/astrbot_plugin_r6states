@@ -1,98 +1,163 @@
 # AstrBot-Plugin-R6States
 
-本项目是基于 [nonebot-plugin-R6States](https://github.com/Siornya/nonebot-plugin-R6States) 的 AstrBot 框架移植强化版。专为 AstrBot 生态与现代网络响应需求进行了深度重构与优化。
+基于 [nonebot-plugin-R6States](https://github.com/Siornya/nonebot-plugin-R6States) 的 AstrBot 移植强化版，用于查询《彩虹六号：围攻》(Rainbow Six Siege) 的玩家战绩、干员/地图/武器百科、实时在线人数以及职业赛事信息。
 
-## Features | 核心特性
+数据全部来自公开 API，不含 Playwright / BeautifulSoup 爬虫逻辑。
 
-* **删除了爬虫**
-    完全移除了原版的 Playwright 与 BeautifulSoup 抓取逻辑。所有玩家数据（战绩、胜率、最高段位、常用主力干员等）均由原生高并发 API 驱动，响应时间缩短至毫秒级。
-* **支持LLM调用函数查询**
-    原生接入 AstrBot 的 Function Calling 能力。您或您的群友可以直接使用自然语言（例如：“查一下某人的战绩”或“某支战队最近的比赛是什么情况”），AI 将自动调用内置工具并生成易读的回复。
-* **电竞赛程与比分追踪**
-    除个人战绩外，额外接入了职业电竞赛事的工具数据库。通过指令或大语言模型的自然交流，可随时跟踪各大赛区与参赛战队的最新赛程与实时比分。
-* **R6战术百科与实时在线统计**
-    内置了干员、武器、地图等详细百科查询功能，支持中文地图名直接搜索。同时支持查看全平台实时在线玩家人数。
+> **v1.1.0 起数据源迁移至 [r6.arenyze.com](https://r6.arenyze.com/)**。旧站 `r6data.eu` 已停用，旧 Key 同时失效，请按下方说明重新申请。
 
----
+## 功能特性
 
-## Prerequisites | 准备工作
+- **玩家战绩**：排位 / 标准 / 休闲三种模式的 KD、胜率、击杀死亡、场次，以及当前段位与赛季最高段位。
+- **常用干员**：按局数排序展示生涯最常用的 3 名干员及其胜率。
+- **排位变动**：查看最近的 RP 增减记录与对应段位。
+- **战术百科**：干员、地图、武器详细数据，地图支持中文名搜索。
+- **实时在线**：Steam / Ubisoft Connect / 主机平台的在线人数估算与注册用户统计。
+- **电竞赛事**：通过 PandaScore 查询战队或赛区的近期赛程与比分。
+- **LLM 函数调用**：已接入 AstrBot Function Calling，可直接用自然语言查询，例如"查一下 MacieJay 的战绩"。
+- **批量查询**：一次最多查询 5 名玩家。
 
-为了正常使用本插件的所有功能，您需要提前申请相关的第三方 API 密钥（均为免费服务）：
+## 准备工作
 
-1.  **R6Data API Key (必需，用于玩家战绩查询)**
-    * 前往 [R6Data API](https://r6data.eu/) 注册并获取免费 API Key。
-2.  **PandaScore API Key (可选，用于赛事数据查询)**
-    * 前往 [PandaScore](https://www.pandascore.co/) 注册开发者账号并获取免费 Token。
-    * > **注：** 若不配置此项，电竞查询功能将不可用，但不影响常规玩家战绩查询。
+使用前需要申请以下 API 密钥：
 
----
+1. **R6Data API Key（必需）**
+   - 前往 [r6.arenyze.com](https://r6.arenyze.com/) 注册并生成免费 Key。
+   - Key 有效期约为 **1 个月**，过期后需重新生成，否则请求会返回 401。
+2. **PandaScore Token（可选）**
+   - 前往 [PandaScore](https://www.pandascore.co/) 注册开发者账号并获取免费 Token。
+   - 不配置时仅赛事查询不可用，不影响战绩与百科功能。
 
-## Configuration | 配置指南
+## 安装
 
-获取密钥后，您可以通过以下两种方式完成插件配置：
+环境要求：AstrBot `>= 4.0.0`。
 
-**方式一：WebUI 配置（推荐）**
-进入 AstrBot 的 WebUI 插件配置中心，找到本插件并分别填入 `api_key` (R6Data) 和 `pandascore_api_key` (PandaScore)。
+1. 将本仓库放入 AstrBot 的插件目录：
 
-**方式二：指令快速绑定**
-直接向机器人发送以下指令完成 R6Data 密钥的快速绑定：
-```bash
-/R6DAPI <您的密钥>
-```
+   ```text
+   AstrBot/data/plugins/astrbot_plugin_r6states/
+   ```
 
----
+2. 安装依赖（AstrBot 通常会在加载插件时自动安装）：
 
-## Usage | 指令列表
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-除了使用自然语言与 AI 直接交流外，您也可以使用以下精确指令触发功能：
+3. 重启 AstrBot，在 WebUI 的插件列表中确认本插件已加载。
 
-### 玩家战绩查询 (Player Stats)
+## 配置
 
-| 指令 | 参数说明 | 示例 |
-| :--- | :--- | :--- |
-| `/R6` | `<玩家ID>`：查询单一玩家的本赛季详细战绩。 | `/R6 MacieJay` |
-| `/R6 -g` | `<玩家ID1> <ID2>...`：批量查询多名玩家数据（最多支持 5 个）。 | `/R6 -g playerA playerB` |
-| `/R6 -h` | 打印相关的战绩查询全部分支选项与帮助信息。 | `/R6 -h` |
-**注意：cn赛区还未开赛，无法查询到具体赛事信息，可以查询队伍,比如tyloo、kz、AllGamers等，建议使用全称**
+**方式一：WebUI（推荐）**
 
-### R6百科与工具
+进入 AstrBot WebUI → 插件 → 彩六战绩查询 → 配置，填写：
 
-| 指令 | 参数说明 | 示例 |
-| :--- | :--- | :--- |
-| /r6op | <干员名>：查询指定干员的技能、属性、背景等百科信息。 | /r6op Ash |
-| /r6map | <地图名>：查询指定地图详细信息（支持中文搜索）。 | /r6map 俄勒冈 |
-| /r6w | <武器名>：查询武器的伤害、射速等详细数值。 | /r6w R4-C |
-| /r6s | 无参数：查看当前全平台 (Steam/Uplay/PSN/Xbox) 实时在线人数。 | /r6s |
+| 配置项 | 说明 |
+| :--- | :--- |
+| `api_key` | R6Data API Key，用于战绩、百科与在线人数 |
+| `pandascore_api_key` | PandaScore Token，用于电竞赛事查询（可选） |
 
-### 职业赛事查询 (Esports Matches)
-
-| 指令 | 参数说明 | 示例 |
-| :--- | :--- | :--- |
-| `/R6M` | `<队伍名>`：查询指定职业队伍近期的 5 场比赛赛程或具体比分。 | `/R6M G2` 或 `/R6M w7m` |
-| `/R6M` | `<赛区简称>`：查询该联赛赛区的最新排位赛（支持 NAL, EU, CN, APL 等）。 | `/R6M NAL` |
+**方式二：指令绑定**
 
 ```bash
-    "eu": "Europe MENA League",
-    "eml": "Europe MENA League",
-    "na": "North America League",
-    "nal": "North America League",
-    "cn": "China",
-    "cnl": "China",
-    "br": "Brazil",
-    "latam": "Latin America",
-    "kr": "South Korea",
-    "jp": "Japan",
-    "asia": "Asia",
-    "apl": "Asia-Pacific",
-    "sal": "South America League",
-    "sa": "South America League",
-    "oce": "Oceania",
-    "mena": "MENA"
+/R6DAPI <你的 R6Data Key>
 ```
 
-> **💡 提示：** 强烈建议利用 AstrBot 的 AI 特性，直接以自然语言驱动以上功能，获得最佳的使用体验。
+> 通过指令写入的配置在部分部署方式下可能不会持久化，建议同时在 WebUI 中固化。
 
-# Supports
+## 指令列表
 
-- [个人主页](https://space.bilibili.com/290347024?spm_id_from=333.1007.0.0)
-- [githuub](https://github.com/Diekeng/astrbot_plugin_r6states)
+### 玩家战绩
+
+| 指令 | 说明 | 示例 |
+| :--- | :--- | :--- |
+| `/R6 <玩家ID>` | 查询单名玩家的赛季战绩概览 | `/R6 MacieJay` |
+| `/R6 -g <ID1> <ID2> ...` | 批量查询，最多 5 人 | `/R6 -g MacieJay Beaulo` |
+| `/R6 -h [指令\|all]` | 查看帮助：默认显示常用指令，`all` 显示全部，或指定指令查看详情 | `/R6 -h`、`/R6 -h all`、`/R6 -h r6h` |
+| `/R6H <玩家ID>` | 查看最近的排位 RP 变动记录 | `/R6H MacieJay` |
+
+### 百科与工具
+
+| 指令 | 说明 | 示例 |
+| :--- | :--- | :--- |
+| `/r6op <干员名>` | 干员属性、定位、组织与背景信息 | `/r6op Ash` |
+| `/r6map <地图名>` | 地图详情，支持中文名 | `/r6map 俄勒冈` |
+| `/r6w <武器名>` | 武器伤害、射速、弹匣与配件 | `/r6w R4-C` |
+| `/r6s` | 全平台实时在线人数 | `/r6s` |
+
+### 职业赛事
+
+| 指令 | 说明 | 示例 |
+| :--- | :--- | :--- |
+| `/R6M <队伍名>` | 查询战队最近 5 场比赛 | `/R6M G2`、`/R6M w7m` |
+| `/R6M <赛区简称>` | 查询赛区最新赛程 | `/R6M NAL`、`/R6M EU` |
+
+支持的赛区简称：`EU` / `EML`、`NA` / `NAL`、`CN` / `CNL`、`BR`、`LATAM`、`KR`、`JP`、`ASIA`、`APL`、`SAL`、`SA`、`OCE`、`MENA`。
+
+> 建议直接使用自然语言，由 AstrBot 自动调用对应工具，体验更好。
+
+## 数据来源
+
+| 数据 | 接口 |
+| :--- | :--- |
+| 玩家档案与排位变动 | `https://public-api.arenyze.com/r6/api/v2/profile` |
+| 干员战绩 | `https://public-api.arenyze.com/r6/api/v2/operators` |
+| 实时在线人数 | `https://public-api.arenyze.com/r6/api/v2/gamestats` |
+| 干员 / 地图 / 武器百科 | `https://public-api.arenyze.com/r6/api/{operators\|maps\|weapons}` |
+| 电竞赛事 | `https://api.pandascore.co` |
+
+所有 R6Data 请求通过请求头 `api-key` 鉴权。
+
+## 常见问题
+
+**返回"API 密钥无效或权限被拒绝"**
+Key 已过期或填写有误。前往 [r6.arenyze.com](https://r6.arenyze.com/) 重新生成，Key 有效期约 1 个月。
+
+**提示"未找到对应数据"**
+确认玩家 ID 拼写正确。当前只支持 Ubisoft Connect（`uplay`）平台 ID，不支持 Steam 昵称或邮箱。
+
+**提示"上游统计服务暂时繁忙"或 HTTP 503**
+这是 R6Data 上游统计服务限流，不是插件或 Key 的问题。服务端会在响应里给出建议重试时间，按提示稍后再试即可；热门玩家通常已有缓存，可以直接查询。免费 Key 的额度约为 **40 次/分钟、200 次/小时、400 次/天**，`/R6` 每查询一名玩家消耗 2 次请求。
+
+**百科查不到**
+干员、地图、武器请使用英文名；地图指令支持常见中文名自动转换。
+
+**赛事查询无结果**
+检查 `pandascore_api_key` 是否配置；部分赛区（如 CN）可能尚未开赛，可改用队伍名查询。
+
+**排位变动为空**
+玩家本赛季可能还没有排位记录，或 API 暂未返回历史数据。
+
+## 更新日志
+
+### v1.1.0
+
+- 数据源迁移至 `https://public-api.arenyze.com/r6/api`，适配 v2 接口。
+- 玩家战绩改用 `/v2/profile`，干员数据改用 `/v2/operators`。
+- `/R6H` 改为读取 `/v2/profile` 的 `history`，响应更快。
+- 适配新版返回结构：战绩位于 `stats` 下，干员为扁平数组，板块新增 `casual` / `event` / `warmup`。
+- 干员百科适配新字段（移除已下线的背景传记，补充出生地、年龄、生日）。
+- 重构 `/R6 -h` 帮助：默认只显示常用指令，`/R6 -h all` 查看全部，`/R6 -h <指令>` 查看单条详情。
+- 优化 401 / 404 / 429 / 503 错误提示，透出服务端错误码与建议重试时间。
+- 移除未使用的 `beautifulsoup4`、`pyyaml` 依赖。
+
+### v1.0.0
+
+- 首个 AstrBot 移植版本。
+
+## 致谢
+
+- [nonebot-plugin-R6States](https://github.com/Siornya/nonebot-plugin-R6States)：原项目与数据结构参考。
+- [R6Data / Arenyze](https://r6.arenyze.com/)：玩家战绩、百科与在线数据。
+- [PandaScore](https://www.pandascore.co/)：电竞赛事数据。
+
+## 支持与反馈
+
+- 作者主页：[Bilibili](https://space.bilibili.com/290347024)
+- 项目仓库：[GitHub](https://github.com/Diekeng/astrbot_plugin_r6states)
+
+## License
+
+[AGPL-3.0](LICENSE)
+
+本项目为第三方工具，与 Ubisoft 无关；Rainbow Six Siege 及相关素材归 Ubisoft 所有。

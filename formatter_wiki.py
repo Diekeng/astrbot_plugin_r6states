@@ -86,15 +86,21 @@ def format_operator_info(data: List[Dict[str, Any]], query: str = "") -> str:
     else:
         roles_str = str(roles)
 
+    season = op.get('season_introduced') or "基础干员"
+    if season == "Y0S0":
+        season = "基础干员"
+
+    side = str(op.get('side', '?')).replace('attacker', '进攻方').replace('defender', '防守方')
+
     res = [
         f"👤 干员百科: {op.get('name')} ({op.get('realname', '机密')})",
         f"组织: {op.get('unit', '未知')} | 国籍: {op.get('country_code', '未知')}",
-        f"属性: 速度 {op.get('speed', '?')} | 生命值 {op.get('health', '?')}",
+        f"属性: 速度 {op.get('speed', '?')} | 护甲 {op.get('health', '?')}",
         f"干员定位: {roles_str}",
-        f"阵营: {op.get('side', '?').replace('attacker', '进攻方').replace('defender', '防守方').capitalize()}",
-        f"赛季引入: {op.get('season_introduced', '基础干员')}",
-        "",
-        f"📜 背景传记:\n{op.get('bio', '暂无背景介绍数据。')[:300]}...",
+        f"阵营: {side}",
+        f"赛季引入: {season}",
+        f"出生地: {op.get('birthplace', '未知')} | 年龄: {op.get('age', '未知')}",
+        f"生日: {op.get('date_of_birth', '未知')}",
         "",
         "💡 提示: 更多详情可咨询机器人或查阅官网。"
     ]
@@ -109,18 +115,25 @@ def format_weapon_info(data: List[Dict[str, Any]], query: str = "") -> str:
     
     ops = w.get('operators', "")
     if isinstance(ops, str):
-        ops_str = ops.replace(';', ', ')
+        ops_str = ", ".join(part.strip() for part in ops.split(';') if part.strip())
     elif isinstance(ops, list):
-        ops_str = ", ".join(ops)
+        ops_str = ", ".join(str(part) for part in ops)
     else:
         ops_str = str(ops)
+
+    if not ops_str:
+        ops_display = "暂无支持干员列表。"
+    elif len(ops_str) > 150:
+        ops_display = ops_str[:150] + "..."
+    else:
+        ops_display = ops_str
 
     res = [
         f"🔫 武器百科: {w.get('name')}",
         f"类型: {w.get('type', '未知')}",
         f"伤害: {w.get('stats_damage') or w.get('damage', '未知')} | 射速: {w.get('stats_firerate') or w.get('fire_rate', '未知')}",
         f"弹匣容量: {w.get('stats_ammo') or w.get('capacity', '未知')}",
-        f"支持干员: {ops_str[:150]}..." if ops_str else "暂无支持干员列表。"
+        f"支持干员: {ops_display}"
     ]
     return "\n".join(res)
 

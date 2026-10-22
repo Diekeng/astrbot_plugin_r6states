@@ -1,6 +1,16 @@
 from typing import Dict
 from datetime import datetime
 
+# 新版 API 的 board_id（旧版还有 living_game_mode）
+BOARD_NAMES = {
+    "ranked": "排位",
+    "standard": "标准",
+    "casual": "休闲",
+    "living_game_mode": "非排",
+    "event": "活动",
+    "warmup": "热身",
+}
+
 def clean_number(s: str) -> str:
     return s.replace(',', '')
 
@@ -12,6 +22,60 @@ def calculate_winrate(wins, losses):
     total = wins + losses
     if total == 0: return 0.0
     return round((wins / total) * 100, 2)
+
+def _top_operators(ops_data: dict, limit: int = 3):
+    """返回 [(干员名, 局数, 胜率)]，兼容新版扁平数组与旧版 split 结构"""
+    if not isinstance(ops_data, dict):
+        return []
+
+    # 新版：operators.operators[]，字段为 roundsPlayed / winPercent / wins / losses
+    entries = (ops_data.get("operators") or {}).get("operators") or []
+    if isinstance(entries, list) and entries:
+        ranked = sorted(entries, key=lambda o: o.get("roundsPlayed") or 0, reverse=True)
+        result = []
+        for op in ranked:
+            played = op.get("roundsPlayed") or 0
+            if played <= 0:
+                continue
+            wr = op.get("winPercent")
+            if wr is None:
+                wr = calculate_winrate(op.get("wins", 0), op.get("losses", 0))
+            result.append((op.get("operator", "Unknown"), played, wr))
+            if len(result) >= limit:
+                break
+        return result
+
+    # 旧版兼容：split.pc.playlists.*.operators.*.rounds
+    operator_plays = {}
+    split_data = ops_data.get("split", {})
+    if isinstance(split_data, dict):
+        playlists = split_data.get("pc", {}).get("playlists", {})
+        if isinstance(playlists, dict):
+            for p_data in playlists.values():
+                if not isinstance(p_data, dict):
+                    continue
+                ops = p_data.get("operators", {})
+                if not isinstance(ops, dict):
+                    continue
+                for op_info in ops.values():
+                    if not isinstance(op_info, dict):
+                        continue
+                    name = op_info.get("operator", "Unknown")
+                    rounds = op_info.get("rounds", {})
+                    played = rounds.get("seasonal", {}).get("played", 0)
+                    won = rounds.get("seasonal", {}).get("won", 0)
+                    if played == 0:
+                        played = rounds.get("lifetime", {}).get("played", 0)
+                        won = rounds.get("lifetime", {}).get("won", 0)
+                    operator_plays.setdefault(name, {"played": 0, "won": 0})
+                    operator_plays[name]["played"] += played
+                    operator_plays[name]["won"] += won
+
+    sorted_ops = sorted(operator_plays.items(), key=lambda x: x[1]["played"], reverse=True)
+    return [
+        (name, plays["played"], calculate_winrate(plays["won"], plays["played"] - plays["won"]))
+        for name, plays in sorted_ops if plays["played"] > 0
+    ][:limit]
 
 def get_rank_name(rank_id: int) -> str:
     if rank_id == 0: return "Unranked"
@@ -42,32 +106,35 @@ def format_new_overview(player_id: str, stats_data: dict, ops_data: dict) -> str
     curr_rp = 0
     season_id = "未知"
 
-    profiles = stats_data.get("platform_families_full_profiles", [])
+    # 新版 API 把战绩放在 profile["stats"] 下，同时兼容旧结构
+    stats_root = stats_data.get("stats")
+    if not isinstance(stats_root, dict):
+        stats_root = stats_data
+    profiles = stats_root.get("platform_families_full_profiles") or []
     if isinstance(profiles, list) and len(profiles) > 0:
         boards = profiles[0].get("board_ids_full_profiles", [])
         
         for board in boards:
             b_id = board.get("board_id", "")
-            if b_id == "ranked":
-                name = "排位"
-                inner_profiles = board.get("full_profiles", [])
-                if inner_profiles and isinstance(inner_profiles, list):
-                    prof = inner_profiles[0].get("profile", {})
-                    max_rank = prof.get("max_rank", 0)
-                    max_rp = prof.get("max_rank_points", 0)
-                    curr_rank = prof.get("rank", 0)
-                    curr_rp = prof.get("rank_points", 0)
-                    season_id = prof.get("season_id", "未知")
-            elif b_id == "standard":
-                name = "快速"
-            elif b_id == "living_game_mode":
-                name = "非排"
-            else:
+            name = BOARD_NAMES.get(b_id)
+            if not name:
                 continue
-                
+
             inner_profiles = board.get("full_profiles", [])
-            if not inner_profiles: continue
-            stats = inner_profiles[0].get("season_statistics", {})
+            if not inner_profiles:
+                continue
+
+            fp = inner_profiles[0]
+            prof = fp.get("profile", {})
+            if b_id == "ranked":
+                max_rank = prof.get("max_rank", 0)
+                max_rp = prof.get("max_rank_points", 0)
+                curr_rank = prof.get("rank", 0)
+                curr_rp = prof.get("rank_points", 0)
+                # 新结构里 season_id 在档案条目上，不在 profile 内
+                season_id = fp.get("season_id") or prof.get("season_id", "未知")
+
+            stats = fp.get("season_statistics", {})
             k = stats.get("kills", 0)
             d = stats.get("deaths", 0)
             w = stats.get("match_outcomes", {}).get("wins", 0)
@@ -95,46 +162,12 @@ def format_new_overview(player_id: str, stats_data: dict, ops_data: dict) -> str
     res.append("")
     
     # 3. 最常用的干员
-    res.append("🔫 [本赛季或生涯最常用干员]")
-    operator_plays = {}
-    
-    # 防御式访问 ops_data
-    split_data = ops_data.get("split", {})
-    if isinstance(split_data, dict):
-        playlists = split_data.get("pc", {}).get("playlists", {})
-        if isinstance(playlists, dict):
-            for p_name, p_data in playlists.items():
-                if not isinstance(p_data, dict): continue
-                ops = p_data.get("operators", {})
-                if not isinstance(ops, dict): continue
-                for op_id, op_info in ops.items():
-                    if not isinstance(op_info, dict): continue
-                    name = op_info.get("operator", "Unknown")
-                    rounds = op_info.get("rounds", {})
-                    # Try to get seasonal first, fallback to lifetime
-                    played = rounds.get("seasonal", {}).get("played", 0)
-                    won = rounds.get("seasonal", {}).get("won", 0)
-                    
-                    if played == 0:
-                        played = rounds.get("lifetime", {}).get("played", 0)
-                        won = rounds.get("lifetime", {}).get("won", 0)
-                    
-                    if name not in operator_plays:
-                        operator_plays[name] = {"played": 0, "won": 0}
-                        
-                    operator_plays[name]["played"] += played
-                    operator_plays[name]["won"] += won
-                        
-    # 取前三
-    sorted_ops = sorted(operator_plays.items(), key=lambda x: x[1]["played"], reverse=True)
-    top_ops = [op for op in sorted_ops if op[1]["played"] > 0][:3]
-    
+    res.append("🔫 [生涯最常用干员]")
+
+    top_ops = _top_operators(ops_data)
     if top_ops:
-        for op in top_ops:
-            w = op[1]["won"]
-            p_count = op[1]["played"]
-            wr = calculate_winrate(w, p_count - w)
-            res.append(f"- {op[0]}: {p_count} 局 (胜率 {wr}%)")
+        for op_name, played, wr in top_ops:
+            res.append(f"- {op_name}: {played} 局 (胜率 {wr}%)")
     else:
         res.append("本赛季无相关统计干员数据喵。")
 
@@ -144,7 +177,13 @@ def format_match_history(player_id: str, sea_data: dict) -> str:
     if not isinstance(sea_data, dict) or "error" in sea_data:
         return f"❌ 获取 {player_id} 变动记录失败: {sea_data.get('error') if isinstance(sea_data, dict) else '未知数据结构'}"
     
-    history = sea_data.get("data", {}).get("history", {}).get("data", [])
+    data_root = sea_data.get("data")
+    if not isinstance(data_root, dict):
+        data_root = {}
+    history = (data_root.get("history") or {}).get("data") or []
+    if not history:
+        # 兼容 profile 接口把 history 放在顶层的情况
+        history = (sea_data.get("history") or {}).get("data") or []
     if not history:
         return f"📅 玩家 {player_id} 本赛季暂无排位变动记录。"
     
